@@ -4,8 +4,8 @@ import numpy as np
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
-    df_2324 = pd.read_csv('../Data/PL-season-2324.csv')
-    df_2425 = pd.read_csv('../Data/PL-season-2425.csv')
+    df_2324 = pd.read_csv('PL-season-2324.csv')
+    df_2425 = pd.read_csv('PL-season-2425.csv')
     df_2324["total_fouls"] = df_2324["HF"] + df_2324["AF"]
     df_2324["total_cards"] = df_2324["HY"] + df_2324["AY"] + df_2324["HR"] + df_2324["AR"]
     df_2324["season"] = "23-24"
@@ -39,7 +39,6 @@ def load_data() -> pd.DataFrame:
     ref_2425["season"] = "24-25"
 
     ref_df = pd.concat([ref_2324, ref_2425], ignore_index=True)
-    print(ref_df.columns)
     df = pd.concat([df_2324, df_2425], ignore_index=True)
 
     df["goal_diff"] = df["FTHG"] - df["FTAG"]
