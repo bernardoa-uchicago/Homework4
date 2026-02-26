@@ -10,150 +10,156 @@ def base_theme():
         }
     }
 
-def chart_hook_temp_over_time(df: pd.DataFrame) -> alt.Chart:
-    return (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("temp_max:Q", title="Daily max temp (°C)"),
-            tooltip=[alt.Tooltip("date:T"), alt.Tooltip("temp_max:Q", format=".1f")],
+def Q_1(df: pd.DataFrame, ref_df: pd.DataFrame) -> alt.Chart:
+    season_select = alt.selection_point(
+        fields=["season"],
+        bind=alt.binding_radio(
+            options=["23-24", "24-25"],
+            name="Season: "
         )
-        .properties(height=320)
     )
 
-def chart_windspeeds_over_time(df: pd.DataFrame) -> alt.Chart:
-    return (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("wind:Q", title="Wind Speed"),
-            tooltip=[alt.Tooltip("date:T"), alt.Tooltip("wind:Q", format=".1f")],
-        )
-        .properties(height=320)
+    ref_select = alt.selection_point(
+        fields=["Referee"]
     )
 
-def chart_context_seasonality(df: pd.DataFrame) -> alt.Chart:
-    month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-    return (
-        alt.Chart(df)
-        .mark_boxplot()
-        .encode(
-            x=alt.X("month_name:N", title="Month", sort=month_order),
-            y=alt.Y("temp_max:Q", title="Daily max temp (°C)"),
-        )
-        .properties(height=320)
-    )
+    brush = alt.selection_interval()
 
-def chart_surprise_extremes(df: pd.DataFrame) -> alt.Chart:
-    q = float(df["temp_max"].quantile(0.99))
-    df2 = df.copy()
-    df2["extreme"] = df2["temp_max"] >= q
-
-    base = (
-        alt.Chart(df2)
-        .mark_point(filled=True, size=35)
-        .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("temp_max:Q", title="Daily max temp (°C)"),
-            color=alt.condition("datum.extreme", alt.value("red"), alt.value("lightgray")),
-            tooltip=[alt.Tooltip("date:T"), alt.Tooltip("temp_max:Q", format=".1f")],
-        )
-        .properties(height=320)
-    )
-
-    rule = alt.Chart(pd.DataFrame({"q": [q]})).mark_rule(strokeDash=[6, 4]).encode(y="q:Q")
-    return base + rule
-
-def chart_explain_precip_vs_temp(df: pd.DataFrame) -> alt.Chart:
-    return (
-        alt.Chart(df)
-        .mark_point(opacity=0.45)
-        .encode(
-            x=alt.X("precipitation:Q", title="Precipitation (in)"),
-            y=alt.Y("temp_max:Q", title="Daily max temp (°C)"),
+    ref_chart = (
+        alt.Chart(
+            ref_df,
+            title="Referees Ranked by Cards per Match"
+        ).transform_filter(
+            season_select
+        ).mark_circle(
+            size=120
+        ).encode(
+            x=alt.X("avg_cards:Q", title="Average Cards per Match"),
+            y=alt.Y("Referee:N", sort=alt.SortField("avg_cards", order="descending"), title="Referee"),
+            opacity=alt.condition(ref_select, alt.value(1), alt.value(0.3)),
             tooltip=[
-                "date:T",
-                alt.Tooltip("precipitation:Q", format=".2f"),
-                alt.Tooltip("temp_max:Q", format=".1f"),
+                "Referee:N",
+                alt.Tooltip("avg_fouls:Q"),
+                alt.Tooltip("avg_cards:Q"),
+                "matches:Q"
             ],
+            color=alt.Color("season:N", legend=alt.Legend(title="Season"))
+        ).add_params(
+            ref_select
         )
-        .properties(height=320)
     )
 
-def chart_dashboard(df: pd.DataFrame) -> alt.Chart:
-    weather_types = sorted(df["weather"].unique())
-
-    w_select = alt.selection_point(
-        fields=["weather"],
-        bind=alt.binding_select(options=weather_types, name="Weather: "),
-    )
-    brush = alt.selection_interval(encodings=["x"], name="Time window")
-
-    line = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("temp_max:Q", title="Daily max temp (°C)"),
-            color=alt.Color("weather:N", title="Weather"),
-            tooltip=["date:T", "weather:N", alt.Tooltip("temp_max:Q", format=".1f")],
+    match_chart = (
+        alt.Chart(
+            df,
+            title="Match-Level Cards and Fould Counts Given by each Referee per Match"
+        ).transform_filter(
+            season_select
+        ).mark_circle(
+            size=60
+        ).encode(
+            x=alt.X("total_fouls:Q", title="Fouls in Match"),
+            y=alt.Y("total_cards:Q", title="Cards in Match"),
+            color="Referee:N",
+            opacity=alt.condition(ref_select, alt.value(1), alt.value(0)),
+            tooltip=[
+                alt.Tooltip("Referee:N"),
+                alt.Tooltip("total_fouls:Q"),
+                alt.Tooltip("total_cards:Q"),
+                alt.Tooltip("season:N")
+            ]
+        ).add_params(
+            brush
         )
-        .add_params(w_select, brush)
-        .transform_filter(w_select)
-        .properties(height=260)
     )
+
+    ref_chart = ref_chart.encode(
+        color=alt.condition(
+            brush,
+            alt.value("red"),
+            alt.value("blue")
+        )
+    )
+
+    dashboard = ref_chart | match_chart
+    dashboard = dashboard.add_params(season_select)
+    dashboard
+        
+    return (dashboard)
+
+def Q_2(df: pd.DataFrame) -> alt.Chart:
+    brush = alt.selection_interval()
 
     hist = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X("temp_max:Q", bin=alt.Bin(maxbins=30), title="Daily max temp (°C)"),
-            y=alt.Y("count():Q", title="Days"),
-            tooltip=[alt.Tooltip("count():Q", title="Days")],
+        alt.Chart(
+            df,
+            title='Goal Difference Counts'
+        ).mark_bar(
+        ).encode(
+            x=alt.X("goal_diff:Q", bin=alt.Bin(maxbins=20), title="Goal Difference (Home - Away)"),
+            y="count()",
+            color=alt.value("red"),
+            tooltip=["count()"]
+        ).transform_filter(
+            brush
         )
-        .transform_filter(w_select)
-        .transform_filter(brush)
-        .properties(height=260)
     )
 
-    return alt.vconcat(line, hist).resolve_scale(color="independent")
-
-def chart_dashboard_precipitation(df: pd.DataFrame) -> alt.Chart:
-    weather_types = sorted(df["weather"].unique())
-
-    w_select = alt.selection_point(
-        fields=["weather"],
-        bind=alt.binding_select(options=weather_types, name="Weather: "),
-    )
-    brush = alt.selection_interval(encodings=["x"], name="Time window")
-
-    line = (
-        alt.Chart(df)
-        .mark_line()
-        .encode(
-            x=alt.X("date:T", title="Date"),
-            y=alt.Y("precipitation:Q", title="Precipitation (in)"),
-            color=alt.Color("weather:N", title="Weather"),
-            tooltip=["date:T", "weather:N", alt.Tooltip("precipitation:Q", format=".1f")],
+    scatter = (
+        alt.Chart(
+            df,
+            title='Home vs. Away Goals'
+        ).mark_circle(
+            size=100
+        ).encode(
+            x=alt.X("FTHG:Q", title="Home Goals"),
+            y=alt.Y("FTAG:Q", title="Away Goals"),
+            color=alt.condition(brush, alt.value("red"), alt.value("blue")),
+            tooltip=["HomeTeam:N","AwayTeam:N","FTHG:Q","FTAG:Q","goal_diff:Q","total_goals:Q","season:N"]
+        ).add_params(
+            brush
         )
-        .add_params(w_select, brush)
-        .transform_filter(w_select)
-        .properties(height=260)
     )
 
-    hist = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X("precipitation:Q", bin=alt.Bin(maxbins=30), title="Precipitation (in)"),
-            y=alt.Y("count():Q", title="Days"),
-            tooltip=[alt.Tooltip("count():Q", title="Days")],
+    return (scatter | hist)
+
+def Q_3(team_df: pd.DataFrame) -> alt.Chart:
+    season_select = alt.selection_point(
+    fields=["season"],
+    bind=alt.binding_radio(
+        options=["23-24", "24-25"],
+        name="Season: "
+    )
+    )
+
+    team_select = alt.selection_point(
+        fields=["Team"]
+    )
+
+    dot_plot = (
+        alt.Chart(
+            team_df,
+            title="Team Performance by Season"
+        ).transform_filter(
+            season_select
+        ).mark_circle(
+            size=120
+        ).encode(
+            x=alt.X("points:Q", title="Points"),
+            y=alt.Y("Team:N",sort=alt.SortField("points", order="descending"),title="Team"),
+            color = "season:N",
+            opacity=alt.condition(team_select, alt.value(1), alt.value(0.3)),
+            tooltip=[
+                "Team:N",
+                "points:Q",
+                "wins:Q",
+                "goal_diff:Q",
+                "position:Q",
+                "season:N"
+            ]
+        ).add_params(
+            season_select, 
+            team_select
         )
-        .transform_filter(w_select)
-        .transform_filter(brush)
-        .properties(height=260)
     )
-
-    return alt.vconcat(line, hist).resolve_scale(color="independent")
+    return dot_plot
